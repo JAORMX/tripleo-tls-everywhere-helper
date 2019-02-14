@@ -1,0 +1,10 @@
+---
+- name: Write report entry
+  blockinfile:
+    create: true
+    marker: ''
+    path: /tmp/report.txt
+    content: "{{ lookup('template', 'templates/report-template-txt.j2') }}"
+  delegate_to: localhost
+  tags:
+    - common

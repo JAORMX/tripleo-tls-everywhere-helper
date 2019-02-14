@@ -24,15 +24,10 @@
     - common
 
 - name: Report DNS status
-  blockinfile:
-    create: true
-    marker: ''
-    path: /tmp/report.txt
-    content: "{{ lookup('template', 'templates/report-template-txt.j2') }}"
+  import_tasks: reportentry.yml
   vars:
     report_status: '{{ dns_status }}'
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ dns_reason }}'
-  delegate_to: localhost
   tags:
     - common
