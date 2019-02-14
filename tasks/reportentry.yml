@@ -3,7 +3,7 @@
   blockinfile:
     create: true
     marker: ''
-    path: /tmp/report.txt
+    path: '{{ helper_report_path }}'
     content: "{{ lookup('template', 'templates/report-template-txt.j2') }}"
   delegate_to: localhost
   tags:
