@@ -1,6 +1,6 @@
-[{{ report_status }}] {{ report_host }}: {{ report_reason }}
-{% if report_recommendations is defined %}
-  {% for recommendation in report_recommendations %}
+[{{ report_status }}] (host: {{ report_host }}) {{ report_reason }}
+{% if report_recommendations is defined and report_recommendations %}
+{% for recommendation in report_recommendations %}
   - RECOMMENDATION: {{ recommendation }}
-  {% endfor %}
+{% endfor %}
 {% endif %}
