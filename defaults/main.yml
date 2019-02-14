@@ -1,2 +1,3 @@
 ---
-# defaults file for tripleo-tls-everywhere-helper
+helper_status_ok: OK
+helper_status_error: ERROR
