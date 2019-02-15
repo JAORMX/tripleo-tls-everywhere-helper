@@ -6,5 +6,6 @@
     path: '{{ helper_report_path }}'
     content: "{{ lookup('template', 'templates/report-template-txt.j2') }}"
   delegate_to: localhost
+  changed_when: false
   tags:
     - common

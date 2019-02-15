@@ -2,4 +2,4 @@
 - name: Converge
   hosts: all
   roles:
-    - role: tripleo-tls-everywhere-helper
+    - role: JAORMX.tripleo-tls-everywhere-helper
