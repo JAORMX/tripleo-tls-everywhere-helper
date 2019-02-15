@@ -83,7 +83,7 @@
     firewall_recommendations: null
   when: ipa_ca_ping_status.rc != 0
 
-- name: Report firwall status
+- name: Report firewall status
   import_tasks: reportentry.yml
   vars:
     report_check: "Firewall check"
@@ -91,3 +91,34 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ firewall_reason }}'
     report_recommendations: '{{ firewall_recommendations }}'
+
+# IdM/FreeIPA related tasks
+- name: Check for IdM/FreeIPA host configuration
+  stat:
+    path: /etc/ipa/default.conf
+  register: ipa_conf_stat
+
+- name: Set facts for IdM/FreeIPA configuration present
+  set_fact:
+    ipa_conf_status: '{{ helper_status_ok }}'
+    ipa_conf_reason: "The host {{ ansible_host }} has the file /etc/ipa/default.conf"
+    ipa_conf_recommendations: null
+  when: ipa_conf_stat.stat.exists
+
+- name: Set facts for IdM/FreeIPA configuration missing
+  set_fact:
+    ipa_conf_status: '{{ helper_status_error }}'
+    ipa_conf_reason: "The host {{ ansible_host }} is missing the file /etc/ipa/default.conf"
+    ipa_conf_recommendations:
+      - "The host {{ ansible_host }} needs to be enrolled to IdM/FreeIPA"
+      - If there were enrollment issues, you'll see them in /var/log/ipaclient-install.log
+  when: not ipa_conf_stat.stat.exists
+
+- name: Report IdM/FreeIPA host configuration status
+  import_tasks: reportentry.yml
+  vars:
+    report_check: "IdM/FreeIPA host configuration check"
+    report_status: '{{ ipa_conf_status }}'
+    report_host: '{{ ansible_hostname }}'
+    report_reason: '{{ ipa_conf_reason }}'
+    report_recommendations: '{{ ipa_conf_recommendations }}'
