@@ -1,0 +1,30 @@
+---
+sudo: required
+language: python
+services: docker
+
+env:
+  global:
+    - ROLE_NAME: JAORMX.tripleo-tls-everywhere-helper
+  matrix:
+    - MOLECULE_DISTRO="centos:7"
+    - MOLECULE_DISTRO="fedora:28"
+    - MOLECULE_DISTRO="fedora:29"
+
+install:
+  # Install test dependencies.
+  - pip install -r test-requirements.txt
+
+before_script:
+  # Use actual Ansible Galaxy role name for the project directory.
+  - REPO_PATH=${PWD##*/}
+  - cd ../
+  - mv $REPO_PATH $ROLE_NAME
+  - cd $ROLE_NAME
+
+script:
+  # Run tests.
+  - molecule test
+
+notifications:
+webhooks: https://galaxy.ansible.com/api/v1/notifications/
