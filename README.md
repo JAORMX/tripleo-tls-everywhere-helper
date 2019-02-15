@@ -45,7 +45,7 @@ tripleo-ansible-inventory --static-yaml-inventory hosts.yaml
 
 This will create an inventory file called **hosts.yaml**.
 
-Edit this file to have the user match what you're using.
+Edit this file to have the undercloud ansible_ssh_user match what you're using.
 
 Finally, you can run the playbook as follows:
 
