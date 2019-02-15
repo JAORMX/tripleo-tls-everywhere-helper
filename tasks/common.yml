@@ -62,7 +62,7 @@
         firewall_status: '{{ helper_status_ok }}'
         firewall_reason: "The host {{ ansible_hostname }} can access FreeIPA through all relevant ports"
         firewall_recommendations: null
-      when: not port_status.failed|bool
+      when: "'failed' not in port_status"
 
     - name: Set facts for issues in firewall settings
       set_fact:
@@ -72,7 +72,9 @@
           - "Please make sure that the following ports are open on the IdM/FreeIPA node: {{ firewall_query }}"
       vars:
         firewall_query: "{{ port_status.results | json_query('[?failed].item') | join(', ') }}"
-      when: port_status.failed|bool
+      when:
+        - "'failed' in port_status"
+        - port_status.failed|bool
 
 - name: Set facts for skipping firewall checks
   set_fact:
