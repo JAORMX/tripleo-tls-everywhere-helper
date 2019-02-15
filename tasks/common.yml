@@ -74,10 +74,6 @@
         firewall_query: "{{ port_status.results | json_query('[?failed].item') | join(', ') }}"
       when: port_status.failed|bool
 
-    - name: debugging firewall recs
-      debug:
-        msg: "Debugging {{ firewall_recommendations }}"
-
 - name: Set facts for skipping firewall checks
   set_fact:
     firewall_status: '{{ helper_status_skipped }}'
