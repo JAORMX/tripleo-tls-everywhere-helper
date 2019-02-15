@@ -13,7 +13,7 @@ galaxy_info:
 
   # min_ansible_container_version:
 
-  #github_branch:
+  # github_branch:
 
   platforms:
     - name: EL
