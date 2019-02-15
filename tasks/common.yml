@@ -122,3 +122,113 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ ipa_conf_reason }}'
     report_recommendations: '{{ ipa_conf_recommendations }}'
+
+# NOTE(jaosorior): This currently does a lookup, which only runs on the host that's
+# running the playbook. We assume that all of the hosts are in the same realm, so
+# this is not a problem for now.
+- name: Set fact for IdM/FreeIPA realm
+  set_fact:
+    ipa_realm: "{{ lookup('ini', 'realm section=global file=/etc/ipa/default.conf') }}"
+  when: ipa_conf_stat.stat.exists
+
+- name: Set fact for IdM/FreeIPA host entry
+  set_fact:
+    host_entry: "{{ ansible_fqdn }}@{{ ipa_realm }}"
+  when: ipa_conf_stat.stat.exists
+
+- name: Set fact for IdM/FreeIPA host principal
+  set_fact:
+    host_principal: "host/{{ host_entry }}"
+  when: ipa_conf_stat.stat.exists
+
+# Kerberos keytab related tasks
+- name: Check for kerberos host keytab
+  stat:
+    path: /etc/krb5.keytab
+  register: krb5_keytab_stat
+
+- name: Set facts for kerberos host keytab present
+  set_fact:
+    krb5_keytab_status: '{{ helper_status_ok }}'
+    krb5_keytab_reason: "The host {{ ansible_host }} has the file /etc/krb5.keytab"
+    krb5_keytab_recommendations: null
+  when: krb5_keytab_stat.stat.exists
+
+- name: Set facts for kerberos host keytab missing
+  set_fact:
+    krb5_keytab_status: '{{ helper_status_error }}'
+    krb5_keytab_reason: "The host {{ ansible_host }} is missing the file /etc/krb5.keytab"
+    krb5_keytab_recommendations:
+      - "The host {{ ansible_host }} needs to be enrolled to IdM/FreeIPA"
+      - If there were enrollment issues, you'll see them in /var/log/ipaclient-install.log
+      - alternatively, you can request the keytab for this host with the ipa-getkeytab command
+  when: not krb5_keytab_stat.stat.exists
+
+- name: Report kerberos host keytab status
+  import_tasks: reportentry.yml
+  vars:
+    report_check: "Kerberos host keytab check"
+    report_status: '{{ krb5_keytab_status }}'
+    report_host: '{{ ansible_hostname }}'
+    report_reason: '{{ krb5_keytab_reason }}'
+    report_recommendations: '{{ krb5_keytab_recommendations }}'
+
+- name: List Kerberos principals in /etc/krb5.keytab
+  expect:
+    command: ktutil
+    responses:
+      ktutil:
+        - "rkt /etc/krb5.keytab"
+        - "list"
+        - "quit"
+  register: keytab_principal_list
+  become: true
+  when: krb5_keytab_stat.stat.exists
+
+- name: Set facts for host principals in /etc/krb5.keytab
+  set_fact:
+    principal_in_keytab_status: '{{ helper_status_ok }}'
+    principal_in_keytab_reason: "The principal {{ host_principal }} is in the keytab"
+    principal_in_keytab_recommendations: null
+  when:
+    - krb5_keytab_stat.stat.exists
+    - ipa_conf_stat.stat.exists
+    - "host_principal in keytab_principal_list.stdout"
+
+- name: Set facts for host principals NOT in /etc/krb5.keytab
+  set_fact:
+    principal_in_keytab_status: '{{ helper_status_error }}'
+    principal_in_keytab_reason: "The principal {{ host_principal }} is  missing from the keytab"
+    principal_in_keytab_recommendations:
+      - You might have overwritten the keytab. Re-enroll or request the keytab using ipa-getkeytab
+
+  when:
+    - krb5_keytab_stat.stat.exists
+    - ipa_conf_stat.stat.exists
+    - "host_principal not in keytab_principal_list.stdout"
+
+- name: Set facts for skipping host principals check without IdM/FreeIPA config
+  set_fact:
+    principal_in_keytab_status: '{{ helper_status_skipped }}'
+    principal_in_keytab_reason: "skipped checking for the principal in the host's {{ ansible_host }} because there is no keytab file"
+    principal_in_keytab_recommendations: null
+  when:
+    - not ipa_conf_stat.stat.exists
+    - krb5_keytab_stat.stat.exists
+
+- name: Set facts for skipping host principals check without keytab
+  set_fact:
+    principal_in_keytab_status: '{{ helper_status_skipped }}'
+    principal_in_keytab_reason: "skipped checking for the principal in the host's {{ ansible_host }} because there is no keytab file"
+    principal_in_keytab_recommendations: null
+  when:
+    - not krb5_keytab_stat.stat.exists
+
+- name: Report kerberos host keytab status
+  import_tasks: reportentry.yml
+  vars:
+    report_check: "Kerberos principal in host keytab check"
+    report_status: '{{ principal_in_keytab_status }}'
+    report_host: '{{ ansible_hostname }}'
+    report_reason: '{{ principal_in_keytab_reason }}'
+    report_recommendations: '{{ principal_in_keytab_recommendations }}'
