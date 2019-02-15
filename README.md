@@ -4,28 +4,23 @@ Role Name
 A helper ansible role for validating and guiding you through a TripleO TLS
 everywhere deployment
 
-Requirements
-------------
-
-TODO
 
 Role Variables
 --------------
 
-TODO
+* `helper_report_path`: Is the path where the report of the helper run will
+                        be stored. Defaults to **/tmp/report.txt**.
 
-Dependencies
-------------
-
-TODO
 
 Example Playbook
 ----------------
 
-
-    - hosts: servers
+    ---
+    - hosts: all
       roles:
-         - { role: username.rolename, x: 42 }
+        - tripleo-tls-everywhere-helper
+      tags:
+        - common
 
 License
 -------
