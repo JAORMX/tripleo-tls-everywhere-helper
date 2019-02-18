@@ -1,3 +1,7 @@
 ---
 - name: Common tasks
   import_tasks: common.yml
+
+- name: Undercloud tasks
+  import_tasks: undercloud.yml
+  when: "'Undercloud' in group_names"
