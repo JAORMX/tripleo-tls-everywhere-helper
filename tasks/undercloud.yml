@@ -26,7 +26,7 @@
     undercloud_conf_dns_status: '{{ helper_status_error }}'
     undercloud_conf_dns_reason: 'DNS is not set up correctly in undercloud.conf'
     undercloud_conf_dns_recommendations:
-      -  "Please set the 'undercloud_nameservers' parameter to point to IdM/FreeIPA in undercloud.conf"
+      - "Please set the 'undercloud_nameservers' parameter to point to IdM/FreeIPA in undercloud.conf"
   when: undercloud_conf_dns_query|default('NXDOMAIN') == "NXDOMAIN"
 
 - name: Set facts undercloud.conf DNS is configured
