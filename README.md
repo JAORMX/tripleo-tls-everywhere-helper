@@ -33,6 +33,10 @@ are made:
   (including the undercloud)
 * The dynamic inventory was created with the `tripleo-ansible-inventory` tool.
 
+It is assumed that the playbook will be ran from the undercloud.
+
+### Using the dynamic inventory
+
 As mentioned above, it is recommended that you use the
 `tripleo-ansible-inventory` tool in order to run this playbook. When running
 this tool, you might need to adjust the user for the undercloud.
@@ -45,7 +49,7 @@ tripleo-ansible-inventory --static-yaml-inventory hosts.yaml
 
 This will create an inventory file called **hosts.yaml**.
 
-Edit this file to have the undercloud ansible_ssh_user match what you're using.
+Edit this file to have the undercloud `ansible_ssh_user` match what you're using.
 
 Finally, you can run the playbook as follows:
 
@@ -54,6 +58,23 @@ ansible-playbook -i hosts.yaml tripleo-tls-everywhere-helper/tests/verify-tls-ev
 ```
 
 A report will be created in the path that `helper_report_path` specifies.
+
+### Manually writing an inventory
+
+Note that it is also possible to write an inventory manually in order to run this.
+
+For the undercloud; It would look as follows:
+
+```
+Undercloud:
+  hosts:
+    undercloud: {}
+  vars:
+    ansible_host: localhost
+    ansible_ssh_user: stack
+```
+
+The main thing to note is to have a group called `Undercloud`.
 
 License
 -------
