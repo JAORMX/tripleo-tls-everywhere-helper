@@ -44,3 +44,44 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ undercloud_conf_dns_reason }}'
     report_recommendations: '{{ undercloud_conf_dns_recommendations }}'
+
+# undercloud neutron domain check
+- name: Block for neutron domain check in undercloud.conf
+  when: undercloud_conf_dns_query|default('NXDOMAIN') != "NXDOMAIN"
+  block:
+    # NOTE(jaosorior): This returns a complete answer about the
+    # query. We're just gonna get the FQDN out of this.
+    - name: Host from ip
+      shell: host {{ undercloud_conf_dns_query }} | awk '{print $5}'
+      register: host_from_ip_reg
+
+    - name: Get domain is set in undercloud.conf
+      set_fact:
+        undercloud_overcloud_domain: "{{ lookup('ini', 'overcloud_domain_name section=DEFAULT file={{ helper_undercloud_path }}/undercloud.conf') }}"
+
+    - name: Set facts undercloud.conf domain is not configured correctly
+      set_fact:
+        undercloud_conf_domain_status: '{{ helper_status_error }}'
+        undercloud_conf_domain_reason: 'Domain is not set up correctly in undercloud.conf'
+        undercloud_conf_domain_recommendations:
+          - "Please set the 'overcloud_domain_name' parameter to point to the IdM/FreeIPA's domain in undercloud.conf"
+      when: undercloud_overcloud_domain == "" or undercloud_overcloud_domain == [] or undercloud_overcloud_domain not in host_from_ip_reg.stdout
+
+    - name: Set facts undercloud.conf domain is configured correctly
+      set_fact:
+        undercloud_conf_domain_status: '{{ helper_status_ok }}'
+        undercloud_conf_domain_reason: 'Domain is set up correctly in undercloud.conf'
+        undercloud_conf_domain_recommendations: null
+      when:
+        - undercloud_overcloud_domain != ""
+        - undercloud_overcloud_domain != []
+        - undercloud_overcloud_domain in host_from_ip_reg.stdout
+
+    - name: Report domain setup in undercloud.conf
+      import_tasks: reportentry.yml
+      vars:
+        report_check: "Domain setup in undercloud.conf check"
+        report_status: '{{ undercloud_conf_domain_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ undercloud_conf_domain_reason }}'
+        report_recommendations: '{{ undercloud_conf_domain_recommendations }}'
