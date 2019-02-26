@@ -1,4 +1,54 @@
 ---
+- name: prepare
+  hosts: all
+  tasks:
+    - name: Ensure EPEL is installed
+      package:
+        name: epel-release
+        state: present
+
+    - name: Ensure ruby is installed (needed by hiera)
+      package:
+        name: ruby
+        state: present
+
+    - name: Ensure hiera is installed
+      package:
+        name: hiera
+        state: present
+
+    - name: Create /etc/puppet directory
+      file:
+        path: /etc/puppet
+        state: directory
+        mode: 0755
+
+    - name: Create /etc/puppet/hieradata directory
+      file:
+        path: /etc/puppet/hieradata
+        state: directory
+        mode: 0755
+
+    - name: Create hiera config file
+      copy:
+        dest: "/etc/puppet/hiera.yaml"
+        content: |
+          ---
+          :backends:
+            - json
+          :json:
+            :datadir: /etc/puppet/hieradata
+          :hierarchy:
+            - all_nodes
+
+    - name: Create hiera file
+      copy:
+        dest: "/etc/puppet/hieradata/all_nodes.json"
+        content: |
+          {
+            "certmonger_user_enabled": true
+          }
+
 - name: Converge
   hosts: all
   roles:
