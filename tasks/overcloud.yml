@@ -14,7 +14,7 @@
       - "Please add the 'OS::TripleO::Services::CertmongerUser' service to all of your TripleO roles."
   when: certmonger_user_enabled.stdout != "true"
 
-- name: Set facts for all certificates in monitoring status
+- name: Set facts for certmonger user service enabled
   set_fact:
     certmonger_user_service_status: '{{ helper_status_ok }}'
     certmonger_user_service_reason: 'This role contains the certmonger user service'
