@@ -5,3 +5,7 @@
 - name: Undercloud tasks
   import_tasks: undercloud.yml
   when: "'Undercloud' in group_names"
+
+- name: Overcloud tasks
+  import_tasks: overcloud.yml
+  when: "'Undercloud' not in group_names"
