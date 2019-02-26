@@ -51,9 +51,10 @@
   block:
     # NOTE(jaosorior): This returns a complete answer about the
     # query. We're just gonna get the FQDN out of this.
-    - name: Host from ip
+    - name: Get hostname from ip
       shell: host {{ undercloud_conf_dns_query }} | awk '{print $5}'
       register: host_from_ip_reg
+      changed_when: false
 
     - name: Get domain is set in undercloud.conf
       set_fact:
