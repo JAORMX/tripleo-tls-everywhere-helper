@@ -7,6 +7,8 @@
   register: ipa_ca_ping_status
   ignore_errors: true
   changed_when: false
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for ok DNS configuration
   set_fact:
@@ -14,6 +16,8 @@
     dns_reason: DNS is configured correctly
     dns_recommendations: null
   when: ipa_ca_ping_status.rc == 0
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for error in DNS configuration
   set_fact:
@@ -25,6 +29,8 @@
       - For the overcloud, you need to set the 'DnsServers' parameter
       - Make sure that the relevant 'search' entry is in /etc/resolv.conf
   when: ipa_ca_ping_status.rc != 0
+  tags:
+    - post-undercloud-deploy
 
 - name: Report DNS status
   import_tasks: reportentry.yml
@@ -34,6 +40,8 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ dns_reason }}'
     report_recommendations: '{{ dns_recommendations }}'
+  tags:
+    - post-undercloud-deploy
 
 # Firewall related tasks
 - name: Firewall validations
@@ -56,6 +64,8 @@
         - 88
         - 464
         - 53
+      tags:
+        - post-undercloud-deploy
 
     - name: Set facts for ok firewall settings
       set_fact:
@@ -63,6 +73,8 @@
         firewall_reason: "The host {{ ansible_hostname }} can access FreeIPA through all relevant ports"
         firewall_recommendations: null
       when: "'failed' not in port_status"
+      tags:
+        - post-undercloud-deploy
 
     - name: Set facts for issues in firewall settings
       set_fact:
@@ -75,6 +87,8 @@
       when:
         - "'failed' in port_status"
         - port_status.failed|bool
+      tags:
+        - post-undercloud-deploy
 
 - name: Set facts for skipping firewall checks
   set_fact:
@@ -82,6 +96,8 @@
     firewall_reason: "skipped {{ ansible_hostname }} firewall checks because DNS wasn't set correctly."
     firewall_recommendations: null
   when: ipa_ca_ping_status.rc != 0
+  tags:
+    - post-undercloud-deploy
 
 - name: Report firewall status
   import_tasks: reportentry.yml
@@ -91,12 +107,16 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ firewall_reason }}'
     report_recommendations: '{{ firewall_recommendations }}'
+  tags:
+    - post-undercloud-deploy
 
 # IdM/FreeIPA related tasks
 - name: Check for IdM/FreeIPA host configuration
   stat:
     path: /etc/ipa/default.conf
   register: ipa_conf_stat
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for IdM/FreeIPA configuration present
   set_fact:
@@ -104,6 +124,8 @@
     ipa_conf_reason: "The host {{ ansible_host }} has the file /etc/ipa/default.conf"
     ipa_conf_recommendations: null
   when: ipa_conf_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for IdM/FreeIPA configuration missing
   set_fact:
@@ -113,6 +135,8 @@
       - "The host {{ ansible_host }} needs to be enrolled to IdM/FreeIPA"
       - If there were enrollment issues, you'll see them in /var/log/ipaclient-install.log
   when: not ipa_conf_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Report IdM/FreeIPA host configuration status
   import_tasks: reportentry.yml
@@ -122,6 +146,8 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ ipa_conf_reason }}'
     report_recommendations: '{{ ipa_conf_recommendations }}'
+  tags:
+    - post-undercloud-deploy
 
 # NOTE(jaosorior): This currently does a lookup, which only runs on the host that's
 # running the playbook. We assume that all of the hosts are in the same realm, so
@@ -130,22 +156,30 @@
   set_fact:
     ipa_realm: "{{ lookup('ini', 'realm section=global file=/etc/ipa/default.conf') }}"
   when: ipa_conf_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Set fact for IdM/FreeIPA host entry
   set_fact:
     host_entry: "{{ ansible_fqdn }}@{{ ipa_realm }}"
   when: ipa_conf_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Set fact for IdM/FreeIPA host principal
   set_fact:
     host_principal: "host/{{ host_entry }}"
   when: ipa_conf_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 # Kerberos keytab related tasks
 - name: Check for kerberos host keytab
   stat:
     path: /etc/krb5.keytab
   register: krb5_keytab_stat
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for kerberos host keytab present
   set_fact:
@@ -153,6 +187,8 @@
     krb5_keytab_reason: "The host {{ ansible_host }} has the file /etc/krb5.keytab"
     krb5_keytab_recommendations: null
   when: krb5_keytab_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for kerberos host keytab missing
   set_fact:
@@ -163,6 +199,8 @@
       - If there were enrollment issues, you'll see them in /var/log/ipaclient-install.log
       - alternatively, you can request the keytab for this host with the ipa-getkeytab command
   when: not krb5_keytab_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Report kerberos host keytab status
   import_tasks: reportentry.yml
@@ -172,6 +210,8 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ krb5_keytab_reason }}'
     report_recommendations: '{{ krb5_keytab_recommendations }}'
+  tags:
+    - post-undercloud-deploy
 
 - name: List Kerberos principals in /etc/krb5.keytab
   expect:
@@ -185,6 +225,8 @@
   changed_when: false
   become: true
   when: krb5_keytab_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for host principals in /etc/krb5.keytab
   set_fact:
@@ -195,6 +237,8 @@
     - krb5_keytab_stat.stat.exists
     - ipa_conf_stat.stat.exists
     - "host_principal in keytab_principal_list.stdout"
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for host principals NOT in /etc/krb5.keytab
   set_fact:
@@ -202,11 +246,12 @@
     principal_in_keytab_reason: "The principal {{ host_principal }} is  missing from the keytab"
     principal_in_keytab_recommendations:
       - You might have overwritten the keytab. Re-enroll or request the keytab using ipa-getkeytab
-
   when:
     - krb5_keytab_stat.stat.exists
     - ipa_conf_stat.stat.exists
     - "host_principal not in keytab_principal_list.stdout"
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for skipping host principals check without IdM/FreeIPA config
   set_fact:
@@ -216,6 +261,8 @@
   when:
     - not ipa_conf_stat.stat.exists
     - krb5_keytab_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Set facts for skipping host principals check without keytab
   set_fact:
@@ -224,6 +271,8 @@
     principal_in_keytab_recommendations: null
   when:
     - not krb5_keytab_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
 
 - name: Report kerberos host keytab status
   import_tasks: reportentry.yml
@@ -233,3 +282,5 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ principal_in_keytab_reason }}'
     report_recommendations: '{{ principal_in_keytab_recommendations }}'
+  tags:
+    - post-undercloud-deploy
