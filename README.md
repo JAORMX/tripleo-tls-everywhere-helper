@@ -88,7 +88,16 @@ deployment:
 
 * `pre-undercloud-deploy`: This is a stage where the user is about to deploy the
                            undercloud. This will check for correct settings in
-                           the undercloud.conf file.
+                           the undercloud.conf file. Note that this will only
+                           be executed in the undercloud.
+
+* `post-undercloud-deploy`: This is a stage where the user has already deployed
+                            the undercloud. This will check that the undercloud
+                            has been correctly enrolled to IdM/FreeIPA and can
+                            communicate with it. Note that some of these checks
+                            may also run on the overcloud hosts if these have
+                            been deployed and were included in the Ansible
+                            inventory.
 
 
 License
