@@ -106,6 +106,41 @@ deployment:
                            the certificates have been issued and are in an
                            acceptable state (MONITORING).
 
+Reading/Parsing the report
+--------------------------
+
+The report has a default format that looks as follows:
+
+```
+* BEGIN <name of the check>
+  [<status>] <status explanation>
+  - RECOMMENDATION: <recommendation text>
+* END <name of the check>
+```
+
+Note that the recommendations will only appear if there were issues found in
+the deployment.
+
+This format is meant to be easily parsed with the `grep` command.
+
+For instance, to see all the checks that passed, you can do:
+
+```
+grep OK /tmp/report.txt
+```
+
+To see all the checks that didn't pass, you can do:
+
+```
+grep ERROR /tmp/report.txt
+```
+
+To see all the recommendations about the errors, you can do:
+
+```
+grep RECOMMENDATION /tmp/report.txt
+```
+
 License
 -------
 
