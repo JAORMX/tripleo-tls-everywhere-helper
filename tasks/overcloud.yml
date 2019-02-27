@@ -5,6 +5,8 @@
   become: true
   changed_when: false
   register: certmonger_user_enabled
+  tags:
+    - post-overcloud-deploy
 
 - name: Set facts for certmonger user service not enabled
   set_fact:
@@ -13,6 +15,8 @@
     certmonger_user_service_recommendations:
       - "Please add the 'OS::TripleO::Services::CertmongerUser' service to all of your TripleO roles."
   when: certmonger_user_enabled.stdout != "true"
+  tags:
+    - post-overcloud-deploy
 
 - name: Set facts for certmonger user service enabled
   set_fact:
@@ -20,6 +24,8 @@
     certmonger_user_service_reason: 'This role contains the certmonger user service'
     certmonger_user_service_recommendations: null
   when: certmonger_user_enabled.stdout == "true"
+  tags:
+    - post-overcloud-deploy
 
 - name: Report status of the certificates
   import_tasks: reportentry.yml
@@ -29,6 +35,8 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ certmonger_user_service_reason }}'
     report_recommendations: '{{ certmonger_user_service_recommendations }}'
+  tags:
+    - post-overcloud-deploy
 
 # Certificate checks
 
@@ -39,6 +47,8 @@
   become: true
   changed_when: false
   register: all_certnames
+  tags:
+    - post-overcloud-deploy
 
 # Get status of all certificates and trim the leading whitespaces
 - name: Get status of all certificates
@@ -49,12 +59,16 @@
   loop_control:
     loop_var: certname
   register: all_cert_status
+  tags:
+    - post-overcloud-deploy
 
 - name: Gather certificates that are not in MONITORING status
   set_fact:
     failed_certs: "{{ all_cert_status.results | json_query(cert_status_query) }}"
   vars:
     cert_status_query: "[?stdout != 'status: MONITORING'].certname"
+  tags:
+    - post-overcloud-deploy
 
 - name: Set facts for certificates in failed status
   set_fact:
@@ -64,6 +78,8 @@
       - "Log into this host and do 'getcert list -i <cert name>' to verify the failure reason"
       - "Verify that the service principal of the certificate is present in IdM/FreeIPA for this host"
   when: failed_certs
+  tags:
+    - post-overcloud-deploy
 
 - name: Set facts for all certificates in monitoring status
   set_fact:
@@ -71,6 +87,8 @@
     cert_status_reason: 'All of the certificates are a healthy status'
     cert_status_recommendations: null
   when: not failed_certs
+  tags:
+    - post-overcloud-deploy
 
 - name: Report status of the certificates
   import_tasks: reportentry.yml
@@ -80,3 +98,5 @@
     report_host: '{{ ansible_hostname }}'
     report_reason: '{{ cert_status_reason }}'
     report_recommendations: '{{ cert_status_recommendations }}'
+  tags:
+    - post-overcloud-deploy
