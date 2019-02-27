@@ -19,8 +19,6 @@ Example Playbook
     - hosts: all
       roles:
         - tripleo-tls-everywhere-helper
-      tags:
-        - common
 
 Running this playbook
 ---------------------
