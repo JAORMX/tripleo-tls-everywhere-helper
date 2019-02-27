@@ -76,6 +76,21 @@ Undercloud:
 
 The main thing to note is to have a group called `Undercloud`.
 
+Working with tags
+-----------------
+
+This role can be used in different stages of the deployment. This behavior is
+controlled with Ansible tags. The default behavior (with no tags specified) is
+to run all of the validations.
+
+Here is a description of the existing tags, as well as what they mean in your
+deployment:
+
+* `pre-undercloud-deploy`: This is a stage where the user is about to deploy the
+                           undercloud. This will check for correct settings in
+                           the undercloud.conf file.
+
+
 License
 -------
 
