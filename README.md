@@ -99,6 +99,14 @@ deployment:
                             been deployed and were included in the Ansible
                             inventory.
 
+* `post-overcloud-deploy`: This is a stage where the user has already deployed
+                           the overcloud. This will potentially tell you how
+                           to resolve common issues with the overcloud deployment
+                           related to TLS everywhere. This will check that the nodes
+                           have been enrolled to IdM/FreeIPA, and have
+                           been configured correctly. This will also check that
+                           the certificates have been issued and are in an
+                           acceptable state (MONITORING).
 
 License
 -------

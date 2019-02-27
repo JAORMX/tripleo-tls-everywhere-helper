@@ -9,6 +9,7 @@
   changed_when: false
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for ok DNS configuration
   set_fact:
@@ -18,6 +19,7 @@
   when: ipa_ca_ping_status.rc == 0
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for error in DNS configuration
   set_fact:
@@ -31,6 +33,7 @@
   when: ipa_ca_ping_status.rc != 0
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Report DNS status
   import_tasks: reportentry.yml
@@ -42,6 +45,7 @@
     report_recommendations: '{{ dns_recommendations }}'
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 # Firewall related tasks
 - name: Firewall validations
@@ -66,6 +70,7 @@
         - 53
       tags:
         - post-undercloud-deploy
+        - post-overcloud-deploy
 
     - name: Set facts for ok firewall settings
       set_fact:
@@ -75,6 +80,7 @@
       when: "'failed' not in port_status"
       tags:
         - post-undercloud-deploy
+        - post-overcloud-deploy
 
     - name: Set facts for issues in firewall settings
       set_fact:
@@ -89,6 +95,7 @@
         - port_status.failed|bool
       tags:
         - post-undercloud-deploy
+        - post-overcloud-deploy
 
 - name: Set facts for skipping firewall checks
   set_fact:
@@ -98,6 +105,7 @@
   when: ipa_ca_ping_status.rc != 0
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Report firewall status
   import_tasks: reportentry.yml
@@ -109,6 +117,7 @@
     report_recommendations: '{{ firewall_recommendations }}'
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 # IdM/FreeIPA related tasks
 - name: Check for IdM/FreeIPA host configuration
@@ -117,6 +126,7 @@
   register: ipa_conf_stat
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for IdM/FreeIPA configuration present
   set_fact:
@@ -126,6 +136,7 @@
   when: ipa_conf_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for IdM/FreeIPA configuration missing
   set_fact:
@@ -137,6 +148,7 @@
   when: not ipa_conf_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Report IdM/FreeIPA host configuration status
   import_tasks: reportentry.yml
@@ -148,6 +160,7 @@
     report_recommendations: '{{ ipa_conf_recommendations }}'
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 # NOTE(jaosorior): This currently does a lookup, which only runs on the host that's
 # running the playbook. We assume that all of the hosts are in the same realm, so
@@ -158,6 +171,7 @@
   when: ipa_conf_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set fact for IdM/FreeIPA host entry
   set_fact:
@@ -165,6 +179,7 @@
   when: ipa_conf_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set fact for IdM/FreeIPA host principal
   set_fact:
@@ -172,6 +187,7 @@
   when: ipa_conf_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 # Kerberos keytab related tasks
 - name: Check for kerberos host keytab
@@ -180,6 +196,7 @@
   register: krb5_keytab_stat
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for kerberos host keytab present
   set_fact:
@@ -189,6 +206,7 @@
   when: krb5_keytab_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for kerberos host keytab missing
   set_fact:
@@ -201,6 +219,7 @@
   when: not krb5_keytab_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Report kerberos host keytab status
   import_tasks: reportentry.yml
@@ -212,6 +231,7 @@
     report_recommendations: '{{ krb5_keytab_recommendations }}'
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: List Kerberos principals in /etc/krb5.keytab
   expect:
@@ -227,6 +247,7 @@
   when: krb5_keytab_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for host principals in /etc/krb5.keytab
   set_fact:
@@ -239,6 +260,7 @@
     - "host_principal in keytab_principal_list.stdout"
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for host principals NOT in /etc/krb5.keytab
   set_fact:
@@ -252,6 +274,7 @@
     - "host_principal not in keytab_principal_list.stdout"
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for skipping host principals check without IdM/FreeIPA config
   set_fact:
@@ -263,6 +286,7 @@
     - krb5_keytab_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Set facts for skipping host principals check without keytab
   set_fact:
@@ -273,6 +297,7 @@
     - not krb5_keytab_stat.stat.exists
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
 
 - name: Report kerberos host keytab status
   import_tasks: reportentry.yml
@@ -284,3 +309,4 @@
     report_recommendations: '{{ principal_in_keytab_recommendations }}'
   tags:
     - post-undercloud-deploy
+    - post-overcloud-deploy
