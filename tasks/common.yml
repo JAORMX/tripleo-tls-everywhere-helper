@@ -310,3 +310,64 @@
   tags:
     - post-undercloud-deploy
     - post-overcloud-deploy
+
+- name: Test if host principal in /etc/krb5.keytab is usable
+  command: kinit -kt /etc/krb5.keytab -c /tmp/my_krb5_ccache
+  become: true
+  register: principal_usable_result
+  ignore_errors: true
+  when:
+    - krb5_keytab_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
+    - post-overcloud-deploy
+
+- name: Set facts for principal is usable skipped
+  set_fact:
+    principal_usable_status: '{{ helper_status_skipped }}'
+    principal_usable_reason: "skipped checking if the principal is usable for host {{ ansible_host }} because there is no keytab file"
+    principal_usable_recommendations: null
+  when:
+    - not krb5_keytab_stat.stat.exists
+  tags:
+    - post-undercloud-deploy
+    - post-overcloud-deploy
+
+- name: Set facts for principal is usable success
+  set_fact:
+    principal_usable_status: '{{ helper_status_ok }}'
+    principal_usable_reason: "The principal {{ host_principal }} is usable to obtain a kerberos ticket"
+    principal_usable_recommendations: null
+  changed_when: true
+  when:
+    - krb5_keytab_stat.stat.exists
+    - principal_usable_result is succeeded
+  notify:
+    - clean_up_krb5_temp_cache
+  tags:
+    - post-undercloud-deploy
+    - post-overcloud-deploy
+
+- name: Set facts for principal is usable failure
+  set_fact:
+    principal_usable_status: '{{ helper_status_error }}'
+    principal_usable_reason: "Tho principal {{ host_principal }} is unable to obtain a kerberos ticket"
+    principal_usable_recommendations: null
+  when:
+    - krb5_keytab_stat.stat.exists
+    - principal_usable_result is failed
+  tags:
+    - post-undercloud-deploy
+    - post-overcloud-deploy
+
+- name: Report principal usable status
+  import_tasks: reportentry.yml
+  vars:
+    report_check: "Kerberos principal in host keytab is usable check"
+    report_status: '{{ principal_usable_status }}'
+    report_host: '{{ ansible_hostname }}'
+    report_reason: '{{ principal_usable_reason }}'
+    report_recommendations: '{{ principal_usable_recommendations }}'
+  tags:
+    - post-undercloud-deploy
+    - post-overcloud-deploy

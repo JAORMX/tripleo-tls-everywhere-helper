@@ -1,1 +1,5 @@
 ---
+- name: clean_up_krb5_temp_cache
+  command: kdestroy -c /tmp/my_krb5_ccache
+  ignore_errors: false
+  become: true
