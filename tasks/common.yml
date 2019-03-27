@@ -1,6 +1,11 @@
 ---
 # These tasks apply to all nodes.
 
+# variable for handlers to clean up
+- name: set facts for handlers to clean up
+  set_fact:
+    temp_krb_caches: []
+
 # DNS related tasks
 - name: Try to ping ipa-ca
   command: ping -c 3 ipa-ca
@@ -338,12 +343,13 @@
     principal_usable_status: '{{ helper_status_ok }}'
     principal_usable_reason: "The principal {{ host_principal }} is usable to obtain a kerberos ticket"
     principal_usable_recommendations: null
+    temp_krb_caches: "{{ temp_krb_caches + [ '/tmp/my_krb5_ccache' ] }}"
   changed_when: true
   when:
     - krb5_keytab_stat.stat.exists
     - principal_usable_result is succeeded
   notify:
-    - clean_up_krb5_temp_cache
+    - clean_up_temp_krb_caches
   tags:
     - post-undercloud-deploy
     - post-overcloud-deploy

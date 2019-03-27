@@ -1,4 +1,12 @@
 ---
+- name: get package facts
+  package_facts:
+    manager: "auto"
+
+- name: Is the undercloud containerized?
+  set_fact:
+    containerized_undercloud: "{{ ansible_facts.packages['puppet-keystone'][0].version is version('13', '>=') }}"
+
 - name: Verify that undercloud.conf exists
   stat:
     path: "{{ helper_undercloud_path }}/undercloud.conf"
@@ -146,3 +154,78 @@
     report_recommendations: '{{ undercloud_conf_enable_novajoin_recommendations }}'
   tags:
     - pre-undercloud-deploy
+
+- name: Set fact for novajoin user principal
+  set_fact:
+    novajoin_principal: "nova/{{ host_entry }}"
+  when: ipa_conf_stat.stat.exists
+
+- name: Set novajoin file locations if not containerized
+  set_fact:
+    novajoin_keytab_path: /etc/novajoin/krb5.keytab
+  when:
+    - not containerized_undercloud
+  become: yes
+
+- name: Set novajoin file locations if containerized
+  set_fact:
+    novajoin_keytab_path: /var/lib/config-data/containers/novajoin/etc/novajoin/krb5.keytab
+  when:
+    - containerized_undercloud
+
+- name: verify the novajoin keytab is usable
+  become: true
+  tags:
+    - post-undercloud-deploy
+  block:
+    - name: Check for novajoin kerberos host keytab
+      stat:
+        path: "{{ novajoin_keytab_path }}"
+      register: novajoin_krb5_keytab_stat
+
+    - name: Test if novajoin principal in novajoin keytab is usable
+      command: kinit -kt "{{ novajoin_keytab_path }}" -c /tmp/my_novajoin_krb5_ccache "{{ novajoin_principal }}"
+      become: true
+      register: novajoin_principal_usable_result
+      ignore_errors: true
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+
+    - name: Set facts for novajoin principal is usable skipped
+      set_fact:
+        principal_usable_status: '{{ helper_status_skipped }}'
+        principal_usable_reason: "skipped checking if the novajoin principal is usable for host {{ ansible_host }} because there is no keytab file"
+        principal_usable_recommendations: null
+      when:
+        - not novajoin_krb5_keytab_stat.stat.exists
+
+    - name: Set facts for novajoin principal is usable success
+      set_fact:
+        principal_usable_status: '{{ helper_status_ok }}'
+        principal_usable_reason: "The principal {{ novajoin_principal }} is able to obtain a kerberos ticket"
+        principal_usable_recommendations: null
+        temp_krb_caches: "{{ temp_krb_caches + [ '/tmp/my_novajoin_krb5_ccache' ] }}"
+      changed_when: true
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+        - novajoin_principal_usable_result is succeeded
+      notify:
+        - clean_up_temp_krb_caches
+
+    - name: Set facts for principal is usable failure
+      set_fact:
+        principal_usable_status: '{{ helper_status_error }}'
+        principal_usable_reason: "Tho principal {{ novajoin_principal }} is unable to obtain a kerberos ticket"
+        principal_usable_recommendations: null
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+        - novajoin_principal_usable_result is failed
+
+    - name: Report principal usable status
+      import_tasks: reportentry.yml
+      vars:
+        report_check: "Kerberos principal in novajoin keytab is usable check"
+        report_status: '{{ principal_usable_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ principal_usable_reason }}'
+        report_recommendations: '{{ principal_usable_recommendations }}'
