@@ -6,7 +6,17 @@
 - name: Is the undercloud containerized?
   set_fact:
     containerized_undercloud: "{{ ansible_facts.packages['puppet-keystone'][0].version is version('13', '>=') }}"
+    container_prefix: ""
+  tags:
+    - post-undercloud-deploy
 
+- name: Set prefix for containerized undercloud
+  set_fact:
+    container_prefix: "/var/lib/config_data/containers/novajoin/"
+  when: containerized_undercloud
+  tags:
+    - post-undercloud-deploy
+  
 - name: Verify that undercloud.conf exists
   stat:
     path: "{{ helper_undercloud_path }}/undercloud.conf"
@@ -160,18 +170,9 @@
     novajoin_principal: "nova/{{ host_entry }}"
   when: ipa_conf_stat.stat.exists
 
-- name: Set novajoin join.conf location if not containerized
+- name: Set novajoin join.conf location
   set_fact:
-    novajoin_conf_file: /etc/novajoin/join.conf
-  when:
-    - not containerized_undercloud
-  become: yes
-
-- name: Set novajoin file locations if containerized
-  set_fact:
-    novajoin_conf_file: /var/lib/config-data/containers/novajoin/etc/novajoin/join.conf
-  when:
-    - containerized_undercloud
+    novajoin_conf_file: "{{ container_prefix }}/etc/novajoin/join.conf"
 
 - name: Verify that join.conf exists
   stat:
@@ -208,7 +209,7 @@
 
 - name: get needed facts from join.conf
   set_fact:
-    novajoin_keytab_path: "{{ lookup('ini', 'keytab section=DEFAULT file=/tmp/temp_join.conf') }}"
+    novajoin_keytab_path: "{{ container_prefix}}/{{ lookup('ini', 'keytab section=DEFAULT file=/tmp/temp_join.conf') }}"
     novajoin_server_port: "{{ lookup('ini', 'join_listen_port section=DEFAULT file=/tmp/temp_join.conf') }}"
     novajoin_server_host: "{{ lookup('ini', 'join_listen section=DEFAULT file=/tmp/temp_join.conf') }}"
 
