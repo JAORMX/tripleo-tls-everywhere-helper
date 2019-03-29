@@ -4,3 +4,4 @@
   ignore_errors: false
   become: true
   with_items: "{{ temp_krb_caches }}"
+  delegate_to: novajoin_server

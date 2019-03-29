@@ -1,22 +1,62 @@
 ---
-- name: get package facts
-  package_facts:
-    manager: "auto"
-
-- name: Is the undercloud containerized?
-  set_fact:
-    containerized_undercloud: "{{ ansible_facts.packages['puppet-keystone'][0].version is version('13', '>=') }}"
-    container_prefix: ""
+ # figure out what kind of undercloud we have
+- name: test if this is a podman deployment
+  command: podman inspect novajoin_server
+  ignore_errors: true
+  register: podman_install
   tags:
     - post-undercloud-deploy
 
-- name: Set prefix for containerized undercloud
-  set_fact:
-    container_prefix: "/var/lib/config_data/containers/novajoin/"
-  when: containerized_undercloud
+- name: test if this is a docker deployment
+  command: docker inspect novajoin_server
+  ignore_errors: true
+  register: docker_install
   tags:
     - post-undercloud-deploy
-  
+
+- name: add podman containers to inventory
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: podman
+    ansible_become: true
+  changed_when: false
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  when: podman_install is success
+  tags:
+    - post-undercloud-deploy
+
+- name: add docker containers to inventory
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: docker
+    ansible_become: true
+  changed_when: false
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  when: docker_install is success
+  tags:
+    - post-undercloud-deploy
+
+- name: add host for non-containerized case
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: local
+    ansible_become: true
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  changed_when: false
+  when: docker_install is failed and podman_install is failed
+  tags:
+    - post-undercloud-deploy
+
+- name: set containerized_undercloud boolean
+  set_fact:
+    containerized_undercloud: podman_install is failed and docker_install is failed
+
 - name: Verify that undercloud.conf exists
   stat:
     path: "{{ helper_undercloud_path }}/undercloud.conf"
@@ -165,23 +205,14 @@
   tags:
     - pre-undercloud-deploy
 
-- name: Set fact for novajoin user principal
-  set_fact:
-    novajoin_principal: "nova/{{ host_entry }}"
-  when: ipa_conf_stat.stat.exists
-
-- name: Set novajoin join.conf location
-  set_fact:
-    novajoin_conf_file: "{{ container_prefix }}/etc/novajoin/join.conf"
-
 - name: Verify that join.conf exists
   stat:
-    path: "{{ novajoin_conf_file }}"
+    path: /etc/novajoin/join.conf
   register: join_conf_st
+  delegate_to: novajoin_server
   tags:
     - post-undercloud-deploy
 
-# We really can't continue without join.conf
 - name: Fail if join.conf is not present
   fail:
     msg: join.conf is necessary to continue the validations
@@ -190,51 +221,63 @@
     - post-undercloud-deploy
 
 # We need to lookup stuff from the novajoin join.conf file but its
-# only readable by root.  make a temporary copy here, and read everything
-# we need.
+# only readable by root and lookups run in the context of the ansible_user.
+# So we fetch it temporarily and read everything we need.
 
-- name: Copy join.conf
-  command: cp "{{ novajoin_conf_file }}" /tmp/temp_join.conf
+- name: fetch join.conf
+  fetch:
+    src: /etc/novajoin/join.conf
+    dest: /tmp/temp_join
+  delegate_to: novajoin_server
   tags:
     - post-undercloud-deploy
-  become: true
 
-- name: Chown copy of join.conf
-  file:
-    path: /tmp/temp_join.conf
-    owner: "{{ ansible_user }}"
+- name: set temp join.conf location
+  set_fact:
+    tmp_join: /tmp/temp_join/localhost/etc/novajoin/join.conf
   tags:
     - post-undercloud-deploy
-  become: true
 
 - name: get needed facts from join.conf
   set_fact:
-    novajoin_keytab_path: "{{ container_prefix}}/{{ lookup('ini', 'keytab section=DEFAULT file=/tmp/temp_join.conf') }}"
-    novajoin_server_port: "{{ lookup('ini', 'join_listen_port section=DEFAULT file=/tmp/temp_join.conf') }}"
-    novajoin_server_host: "{{ lookup('ini', 'join_listen section=DEFAULT file=/tmp/temp_join.conf') }}"
+    novajoin_keytab_path: "{{ lookup('ini', 'keytab section=DEFAULT file={{ tmp_join }}') }}"
+    novajoin_server_port: "{{ lookup('ini', 'join_listen_port section=DEFAULT file={{ tmp_join }}') }}"
+    novajoin_server_host: "{{ lookup('ini', 'join_listen section=DEFAULT file={{ tmp_join }}') }}"
+  tags:
+    - post-undercloud-deploy
 
 - name: delete join.conf copy
   file:
-    path: /tmp/temp_join.conf
+    path: /tmp/temp_join
     state: absent
   tags:
     - post-undercloud-deploy
+
+# verify that the keytab and principal are usable
+# We need to move this to a subfile so we can run
+# this against novajoin_server and novajoin_notifier
 
 - name: verify the novajoin keytab is usable
   become: true
   tags:
     - post-undercloud-deploy
   block:
+    - name: Set fact for novajoin user principal
+      set_fact:
+        novajoin_principal: "nova/{{ host_entry }}"
+
     - name: Check for novajoin kerberos host keytab
       stat:
         path: "{{ novajoin_keytab_path }}"
       register: novajoin_krb5_keytab_stat
+      delegate_to: novajoin_server
 
     - name: Test if novajoin principal in novajoin keytab is usable
       command: kinit -kt "{{ novajoin_keytab_path }}" -c /tmp/my_novajoin_krb5_ccache "{{ novajoin_principal }}"
       become: true
       register: novajoin_principal_usable_result
       ignore_errors: true
+      delegate_to: novajoin_server
       when:
         - novajoin_krb5_keytab_stat.stat.exists
 
@@ -311,12 +354,9 @@
         report_reason: '{{ service_running_reason }}'
         report_recommendations: '{{ service_running_recommendations }}'
 
-# note: remove the not_containerized restriction once we test it
-# and add the service running test in the containerized case 
 - name: verify that novajoin-server is reachable
-  when: 
-    - not containerized_undercloud
-    - novajoin_server_status_result is success
+  #when: 
+  #  - novajoin_server_status_result is success
   tags:
     - post-undercloud-deploy
   block:
