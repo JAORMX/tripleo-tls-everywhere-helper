@@ -1,0 +1,10 @@
+---
+- hosts: Undercloud
+  roles:
+    - tls-everywhere-helper-common
+    - tls-everywhere-helper-undercloud
+
+- hosts: overcloud
+  roles:
+    - tls-everywhere-helper-common
+    - tls-everywhere-helper-overcloud

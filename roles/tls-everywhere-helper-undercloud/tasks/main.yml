@@ -1,0 +1,435 @@
+---
+- name: set facts for undercloud handlers to clean up
+  set_fact:
+    novajoin_temp_krb_caches: []
+  tags:
+    - post-undercloud-deploy
+
+ # figure out what kind of undercloud we have
+- name: test if this is a podman deployment
+  command: podman inspect novajoin_server
+  ignore_errors: true
+  register: podman_install
+  tags:
+    - post-undercloud-deploy
+
+- name: test if this is a docker deployment
+  command: docker inspect novajoin_server
+  ignore_errors: true
+  register: docker_install
+  tags:
+    - post-undercloud-deploy
+
+- name: add podman containers to inventory
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: podman
+    ansible_become: true
+  changed_when: false
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  when: podman_install is success
+  tags:
+    - post-undercloud-deploy
+
+- name: add docker containers to inventory
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: docker
+    ansible_become: true
+  changed_when: false
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  when: docker_install is success
+  tags:
+    - post-undercloud-deploy
+
+- name: add host for non-containerized case
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: local
+    ansible_become: true
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  changed_when: false
+  when: docker_install is failed and podman_install is failed
+  tags:
+    - post-undercloud-deploy
+
+- name: set containerized_undercloud boolean
+  set_fact:
+    containerized_undercloud: podman_install is failed and docker_install is failed
+  tags:
+    - post-undercloud-deploy
+
+- name: Verify that undercloud.conf exists
+  stat:
+    path: "{{ helper_undercloud_path }}/undercloud.conf"
+  register: undercloud_conf_st
+  tags:
+    - pre-undercloud-deploy
+
+# We really can't continue without undercloud.conf
+- name: Fail if undercloud.conf is not present
+  fail:
+    msg: undercloud.conf is necessary to continue the validations
+  when: not undercloud_conf_st.stat.exists|bool
+  tags:
+    - pre-undercloud-deploy
+
+# undercloud.conf DNS check
+- name: Verify that nameservers are set in undercloud.conf
+  set_fact:
+    undercloud_nameservers: "{{ lookup('ini', 'undercloud_nameservers section=DEFAULT file={{ helper_undercloud_path }}/undercloud.conf') }}"
+  tags:
+    - pre-undercloud-deploy
+
+- name: Check that nameservers point to IdM/FreeIPA
+  set_fact:
+    undercloud_conf_dns_query: "{{ lookup('dig', 'ipa-ca', '@{{ item }}') }}"
+  loop: "{{ undercloud_nameservers.split(',') }}"
+  when: undercloud_nameservers != "" and undercloud_nameservers != []
+  tags:
+    - pre-undercloud-deploy
+
+- name: Set facts undercloud.conf DNS is not configured
+  set_fact:
+    undercloud_conf_dns_status: '{{ helper_status_error }}'
+    undercloud_conf_dns_reason: 'DNS is not set up correctly in undercloud.conf'
+    undercloud_conf_dns_recommendations:
+      - "Please set the 'undercloud_nameservers' parameter to point to IdM/FreeIPA in undercloud.conf"
+  when: undercloud_conf_dns_query|default('NXDOMAIN') == "NXDOMAIN"
+  tags:
+    - pre-undercloud-deploy
+
+- name: Set facts undercloud.conf DNS is configured
+  set_fact:
+    undercloud_conf_dns_status: '{{ helper_status_ok }}'
+    undercloud_conf_dns_reason: 'DNS is set up correctly in undercloud.conf'
+    undercloud_conf_dns_recommendations: null
+  when: undercloud_conf_dns_query|default('NXDOMAIN') != "NXDOMAIN"
+  tags:
+    - pre-undercloud-deploy
+
+- name: Report DNS setup in undercloud.conf
+  import_tasks: reportentry.yml
+  vars:
+    report_check: "DNS setup in undercloud.conf check"
+    report_status: '{{ undercloud_conf_dns_status }}'
+    report_host: '{{ ansible_hostname }}'
+    report_reason: '{{ undercloud_conf_dns_reason }}'
+    report_recommendations: '{{ undercloud_conf_dns_recommendations }}'
+  tags:
+    - pre-undercloud-deploy
+
+# undercloud neutron domain check
+- name: Block for neutron domain check in undercloud.conf
+  when: undercloud_conf_dns_query|default('NXDOMAIN') != "NXDOMAIN"
+  block:
+    # NOTE(jaosorior): This returns a complete answer about the
+    # query. We're just gonna get the FQDN out of this.
+    - name: Get IdM/FreeIPA hostname from ip
+      shell: host {{ undercloud_conf_dns_query }} | awk '{print $5}'
+      register: host_from_ip_reg
+      changed_when: false
+      tags:
+        - pre-undercloud-deploy
+
+    - name: Get domain is set in undercloud.conf
+      set_fact:
+        undercloud_overcloud_domain: "{{ lookup('ini', 'overcloud_domain_name section=DEFAULT file={{ helper_undercloud_path }}/undercloud.conf') }}"
+      tags:
+        - pre-undercloud-deploy
+
+    - name: Set facts undercloud.conf domain is not configured correctly
+      set_fact:
+        undercloud_conf_domain_status: '{{ helper_status_error }}'
+        undercloud_conf_domain_reason: 'Domain is not set up correctly in undercloud.conf'
+        undercloud_conf_domain_recommendations:
+          - "Please set the 'overcloud_domain_name' parameter to point to the IdM/FreeIPA's domain in undercloud.conf"
+      when: undercloud_overcloud_domain == "" or undercloud_overcloud_domain == [] or undercloud_overcloud_domain not in host_from_ip_reg.stdout
+      tags:
+        - pre-undercloud-deploy
+
+    - name: Set facts undercloud.conf domain is configured correctly
+      set_fact:
+        undercloud_conf_domain_status: '{{ helper_status_ok }}'
+        undercloud_conf_domain_reason: 'Domain is set up correctly in undercloud.conf'
+        undercloud_conf_domain_recommendations: null
+      when:
+        - undercloud_overcloud_domain != ""
+        - undercloud_overcloud_domain != []
+        - undercloud_overcloud_domain in host_from_ip_reg.stdout
+      tags:
+        - pre-undercloud-deploy
+
+    - name: Report domain setup in undercloud.conf
+      import_tasks: reportentry.yml
+      vars:
+        report_check: "Domain setup in undercloud.conf check"
+        report_status: '{{ undercloud_conf_domain_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ undercloud_conf_domain_reason }}'
+        report_recommendations: '{{ undercloud_conf_domain_recommendations }}'
+      tags:
+        - pre-undercloud-deploy
+
+- name: Get enable_novajoin flag from undercloud.conf
+  set_fact:
+    undercloud_enable_novajoin: "{{ lookup('ini', 'enable_novajoin section=DEFAULT default=False file={{ helper_undercloud_path }}/undercloud.conf') }}"
+  tags:
+    - pre-undercloud-deploy
+
+- name: Set facts undercloud.conf enable novajoin is disabled
+  set_fact:
+    undercloud_conf_enable_novajoin_status: '{{ helper_status_error }}'
+    undercloud_conf_enable_novajoin_reason: 'enable_novajoin is not enabled undercloud.conf'
+    undercloud_conf_enable_novajoin_recommendations:
+      - "Please set 'enable_novajoin' to True in undercloud.conf"
+  when: not undercloud_enable_novajoin|bool
+  tags:
+    - pre-undercloud-deploy
+
+- name: Set facts undercloud.conf enable novajoin is enabled
+  set_fact:
+    undercloud_conf_enable_novajoin_status: '{{ helper_status_ok }}'
+    undercloud_conf_enable_novajoin_reason: 'enable_novajoin is enabled undercloud.conf'
+    undercloud_conf_enable_novajoin_recommendations: null
+  when: undercloud_enable_novajoin|bool
+  tags:
+    - pre-undercloud-deploy
+
+- name: Report enable novajoin setup in undercloud.conf
+  import_tasks: reportentry.yml
+  vars:
+    report_check: "Enable novajoin setup in undercloud.conf check"
+    report_status: '{{ undercloud_conf_enable_novajoin_status }}'
+    report_host: '{{ ansible_hostname }}'
+    report_reason: '{{ undercloud_conf_enable_novajoin_reason }}'
+    report_recommendations: '{{ undercloud_conf_enable_novajoin_recommendations }}'
+  tags:
+    - pre-undercloud-deploy
+
+- name: Verify that join.conf exists
+  stat:
+    path: /etc/novajoin/join.conf
+  register: join_conf_st
+  delegate_to: novajoin_server
+  tags:
+    - post-undercloud-deploy
+
+- name: Fail if join.conf is not present
+  fail:
+    msg: join.conf is necessary to continue the validations
+  when: not join_conf_st.stat.exists|bool
+  tags:
+    - post-undercloud-deploy
+
+# We need to lookup stuff from the novajoin join.conf file but its
+# only readable by root and lookups run in the context of the ansible_user.
+# So we fetch it temporarily and read everything we need.
+
+- name: fetch join.conf
+  fetch:
+    src: /etc/novajoin/join.conf
+    dest: /tmp/temp_join
+  delegate_to: novajoin_server
+  tags:
+    - post-undercloud-deploy
+
+- name: set temp join.conf location
+  set_fact:
+    tmp_join: /tmp/temp_join/undercloud/etc/novajoin/join.conf
+  tags:
+    - post-undercloud-deploy
+
+- name: get needed facts from join.conf
+  set_fact:
+    novajoin_keytab_path: "{{ lookup('ini', 'keytab section=DEFAULT file={{ tmp_join }}') }}"
+    novajoin_server_port: "{{ lookup('ini', 'join_listen_port section=DEFAULT file={{ tmp_join }}') }}"
+    novajoin_server_host: "{{ lookup('ini', 'join_listen section=DEFAULT file={{ tmp_join }}') }}"
+  tags:
+    - post-undercloud-deploy
+
+- name: delete join.conf copy
+  file:
+    path: /tmp/temp_join
+    state: absent
+  tags:
+    - post-undercloud-deploy
+
+# verify that the keytab and principal are usable
+# We need to move this to a subfile so we can run
+# this against novajoin_server and novajoin_notifier
+
+- name: verify the novajoin keytab is usable
+  become: true
+  tags:
+    - post-undercloud-deploy
+  block:
+    - name: Set fact for novajoin user principal
+      set_fact:
+        novajoin_principal: "nova/{{ host_entry }}"
+
+    - name: Check for novajoin kerberos host keytab
+      stat:
+        path: "{{ novajoin_keytab_path }}"
+      register: novajoin_krb5_keytab_stat
+      delegate_to: novajoin_server
+
+    - name: Test if novajoin principal in novajoin keytab is usable
+      command: kinit -kt "{{ novajoin_keytab_path }}" -c /tmp/my_novajoin_krb5_ccache "{{ novajoin_principal }}"
+      become: true
+      register: novajoin_principal_usable_result
+      ignore_errors: true
+      delegate_to: novajoin_server
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+
+    - name: Set facts for novajoin principal is usable skipped
+      set_fact:
+        principal_usable_status: '{{ helper_status_skipped }}'
+        principal_usable_reason: "skipped checking if the novajoin principal is usable for host {{ ansible_host }} because there is no keytab file"
+        principal_usable_recommendations: null
+      when:
+        - not novajoin_krb5_keytab_stat.stat.exists
+
+    - name: Set facts for novajoin principal is usable success
+      set_fact:
+        principal_usable_status: '{{ helper_status_ok }}'
+        principal_usable_reason: "The principal {{ novajoin_principal }} is able to obtain a kerberos ticket"
+        principal_usable_recommendations: null
+        temp_krb_caches: "{{ novajoin_temp_krb_caches + [ '/tmp/my_novajoin_krb5_ccache' ] }}"
+      changed_when: true
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+        - novajoin_principal_usable_result is succeeded
+      notify:
+        - clean_up_novajoin_temp_krb_caches
+
+    - name: Set facts for principal is usable failure
+      set_fact:
+        principal_usable_status: '{{ helper_status_error }}'
+        principal_usable_reason: "Tho principal {{ novajoin_principal }} is unable to obtain a kerberos ticket"
+        principal_usable_recommendations: null
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+        - novajoin_principal_usable_result is failed
+
+    - name: Report principal usable status
+      import_tasks: reportentry.yml
+      vars:
+        report_check: "Kerberos principal in novajoin keytab is usable check"
+        report_status: '{{ principal_usable_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ principal_usable_reason }}'
+        report_recommendations: '{{ principal_usable_recommendations }}'
+
+- name: verify that novajoin-server is running if not containerized
+  when: not containerized_undercloud
+  tags:
+    - post-undercloud-deploy
+  block:
+    - name: Check if novajoin-server is running
+      command: systemctl status novajoin-server
+      register: novajoin_server_status_result
+      ignore_errors: true
+
+    - name: Set facts for novajoin-server is running success
+      set_fact:
+        service_running_status: '{{ helper_status_ok }}'
+        service_running_reason: "The novajoin-server service is running"
+        service_running_recommendations: null
+      when: novajoin_server_status_result is success
+
+    - name: Set facts for novajoin-server is running failure
+      set_fact:
+        service_running_status: '{{ helper_status_error }}'
+        service_running_reason: "The novajoin-server service is not running"
+        service_running_recommendations: 
+          - "Start the novajoin-server service with systemctl start novajoin-server"
+      when: novajoin_server_status_result is failed
+
+    - name: Report novajoin-server status
+      import_tasks: reportentry.yml
+      vars:
+        report_check: "novajoin-server is running check"
+        report_status: '{{ service_running_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ service_running_reason }}'
+        report_recommendations: '{{ service_running_recommendations }}'
+
+- name: verify that novajoin-server is reachable
+  #when: 
+  #  - novajoin_server_status_result is success
+  tags:
+    - post-undercloud-deploy
+  block:
+    - name: check if novajoin-server port is reachable
+      wait_for:
+        port: "{{ novajoin_server_port }}"
+        host: "{{ novajoin_server_host }}"
+        timeout: 20
+      register: novajoin_server_port_status
+      ignore_errors: true
+
+    - name: Set facts for novajoin-server port status success
+      set_fact:
+        port_reachable_status: '{{ helper_status_ok }}'
+        port_reachable_reason: "The novajoin-server service is reachable on {{ novajoin_server_port }}"
+        port_reachable_recommendations: null
+      when: novajoin_server_port_status is success
+
+    - name: Set facts for novajoin-server port status failure
+      set_fact:
+        port_reachable_status: '{{ helper_status_error }}'
+        port_reachable_reason: "The novajoin-server service is started, but not reachable locally on {{ novajoin_server_port }}"
+        port_reachable_recommendations: 
+          - "iCheck the novajoin-server logs and journal entry"
+      when: novajoin_server_port_status is failed
+
+    - name: Report novajoin-server port status
+      import_tasks: reportentry.yml
+      vars:
+        report_check: "novajoin-server port is reachable check"
+        report_status: '{{ port_reachable_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ port_reachable_reason }}'
+        report_recommendations: '{{ port_reachable_recommendations }}'
+
+- name: verify that novajoin-notify is running if not containerized
+  when: not containerized_undercloud
+  tags:
+    - post-undercloud-deploy
+  block:
+    - name: Check if novajoin-notify is running
+      command: systemctl status novajoin-notify
+      register: novajoin_notify_status_result
+      ignore_errors: true
+
+    - name: Set facts for novajoin-notify is running success
+      set_fact:
+        service_running_status: '{{ helper_status_ok }}'
+        service_running_reason: "The novajoin-notify service is running"
+        service_running_recommendations: null
+      when: novajoin_notify_status_result is success
+
+    - name: Set facts for novajoin-notify is running failure
+      set_fact:
+        service_running_status: '{{ helper_status_error }}'
+        service_running_reason: "The novajoin-notify service is not running"
+        service_running_recommendations: 
+          - "Start the novajoin-notify service with systemctl start novajoin-notify"
+      when: novajoin_notify_status_result is failed
+
+    - name: Report novajoin-notify status
+      import_tasks: reportentry.yml
+      vars:
+        report_check: "novajoin-notify is running check"
+        report_status: '{{ service_running_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ service_running_reason }}'
+        report_recommendations: '{{ service_running_recommendations }}'
