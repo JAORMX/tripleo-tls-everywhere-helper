@@ -1,0 +1,7 @@
+---
+- hosts: localhost
+  remote_user: root
+  roles:
+    - tls-everywhere-helper-common
+    - tls-everywhere-helper-undercloud
+    - tls-everywhere-helper-overcloud
