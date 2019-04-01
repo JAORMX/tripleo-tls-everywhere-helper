@@ -1,0 +1,7 @@
+---
+- name: clean_up_novajoin_temp_krb_caches
+  command: kdestroy -c {{ item }}
+  ignore_errors: false
+  become: true
+  with_items: "{{ novajoin_temp_krb_caches }}"
+  delegate_to: novajoin_server

@@ -1,0 +1,6 @@
+  [{{ report_status }}] {{ report_reason }}
+{% if report_recommendations is defined and report_recommendations %}
+{% for recommendation in report_recommendations %}
+  - RECOMMENDATION: {{ recommendation }}
+{% endfor %}
+{% endif %}
