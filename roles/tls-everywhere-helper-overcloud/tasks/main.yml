@@ -30,7 +30,7 @@
 - name: Report status of the certificates
   include_role:
     name: tls-everywhere-helper-common
-    tasks_from: reportentry.yml 
+    tasks_from: reportentry.yml
   vars:
     report_check: "Certmonger user service check"
     report_status: '{{ certmonger_user_service_status }}'
@@ -95,7 +95,7 @@
 - name: Report status of the certificates
   include_role:
     name: tls-everywhere-helper-common
-    tasks_from: reportentry.yml 
+    tasks_from: reportentry.yml
   vars:
     report_check: "Status of the certificates check"
     report_status: '{{ cert_status_status }}'
