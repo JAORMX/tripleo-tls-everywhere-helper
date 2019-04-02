@@ -3,7 +3,7 @@
   set_fact:
     novajoin_temp_krb_caches: []
 
- # figure out what kind of undercloud we have
+# figure out what kind of undercloud we have
 - name: test if this is a podman deployment
   command: podman inspect novajoin_server
   ignore_errors: true
@@ -146,7 +146,7 @@
     - name: Report principal usable status
       include_role:
         name: tls-everywhere-helper-common
-        tasks_from: reportentry.yml 
+        tasks_from: reportentry.yml
       vars:
         report_check: "Kerberos principal in novajoin keytab is usable check"
         report_status: '{{ principal_usable_status }}'
@@ -173,14 +173,14 @@
       set_fact:
         service_running_status: '{{ helper_status_error }}'
         service_running_reason: "The novajoin-server service is not running"
-        service_running_recommendations: 
+        service_running_recommendations:
           - "Start the novajoin-server service with systemctl start novajoin-server"
       when: novajoin_server_status_result is failed
 
     - name: Report novajoin-server status
       include_role:
         name: tls-everywhere-helper-common
-        tasks_from: reportentry.yml 
+        tasks_from: reportentry.yml
       vars:
         report_check: "novajoin-server is running check"
         report_status: '{{ service_running_status }}'
@@ -189,7 +189,7 @@
         report_recommendations: '{{ service_running_recommendations }}'
 
 - name: verify that novajoin-server is reachable
-  #when: 
+  # when:
   #  - novajoin_server_status_result is success
   block:
     - name: check if novajoin-server port is reachable
@@ -211,14 +211,14 @@
       set_fact:
         port_reachable_status: '{{ helper_status_error }}'
         port_reachable_reason: "The novajoin-server service is started, but not reachable locally on {{ novajoin_server_port }}"
-        port_reachable_recommendations: 
+        port_reachable_recommendations:
           - "iCheck the novajoin-server logs and journal entry"
       when: novajoin_server_port_status is failed
 
     - name: Report novajoin-server port status
       include_role:
         name: tls-everywhere-helper-common
-        tasks_from: reportentry.yml 
+        tasks_from: reportentry.yml
       vars:
         report_check: "novajoin-server port is reachable check"
         report_status: '{{ port_reachable_status }}'
@@ -245,14 +245,14 @@
       set_fact:
         service_running_status: '{{ helper_status_error }}'
         service_running_reason: "The novajoin-notify service is not running"
-        service_running_recommendations: 
+        service_running_recommendations:
           - "Start the novajoin-notify service with systemctl start novajoin-notify"
       when: novajoin_notify_status_result is failed
 
     - name: Report novajoin-notify status
       include_role:
         name: tls-everywhere-helper-common
-        tasks_from: reportentry.yml 
+        tasks_from: reportentry.yml
       vars:
         report_check: "novajoin-notify is running check"
         report_status: '{{ service_running_status }}'
