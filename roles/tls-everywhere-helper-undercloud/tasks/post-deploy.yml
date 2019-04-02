@@ -1,0 +1,261 @@
+---
+- name: set facts for undercloud handlers to clean up
+  set_fact:
+    novajoin_temp_krb_caches: []
+
+ # figure out what kind of undercloud we have
+- name: test if this is a podman deployment
+  command: podman inspect novajoin_server
+  ignore_errors: true
+  register: podman_install
+
+- name: test if this is a docker deployment
+  command: docker inspect novajoin_server
+  ignore_errors: true
+  register: docker_install
+
+- name: add podman containers to inventory
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: podman
+    ansible_become: true
+  changed_when: false
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  when: podman_install is success
+
+- name: add docker containers to inventory
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: docker
+    ansible_become: true
+  changed_when: false
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  when: docker_install is success
+
+- name: add host for non-containerized case
+  add_host:
+    name: "{{ item }}"
+    ansible_connection: local
+    ansible_become: true
+  with_items:
+    - novajoin_server
+    - novajoin_notifier
+  changed_when: false
+  when: docker_install is failed and podman_install is failed
+
+- name: set containerized_undercloud boolean
+  set_fact:
+    containerized_undercloud: podman_install is failed and docker_install is failed
+
+- name: Verify that join.conf exists
+  stat:
+    path: /etc/novajoin/join.conf
+  register: join_conf_st
+  delegate_to: novajoin_server
+
+- name: Fail if join.conf is not present
+  fail:
+    msg: join.conf is necessary to continue the validations
+  when: not join_conf_st.stat.exists|bool
+
+# We need to lookup stuff from the novajoin join.conf file but its
+# only readable by root and lookups run in the context of the ansible_user.
+# So we fetch it temporarily and read everything we need.
+
+- name: fetch join.conf
+  fetch:
+    src: /etc/novajoin/join.conf
+    dest: /tmp/temp_join
+  delegate_to: novajoin_server
+
+- name: set temp join.conf location
+  set_fact:
+    tmp_join: /tmp/temp_join/undercloud/etc/novajoin/join.conf
+
+- name: get needed facts from join.conf
+  set_fact:
+    novajoin_keytab_path: "{{ lookup('ini', 'keytab section=DEFAULT file={{ tmp_join }}') }}"
+    novajoin_server_port: "{{ lookup('ini', 'join_listen_port section=DEFAULT file={{ tmp_join }}') }}"
+    novajoin_server_host: "{{ lookup('ini', 'join_listen section=DEFAULT file={{ tmp_join }}') }}"
+
+- name: delete join.conf copy
+  file:
+    path: /tmp/temp_join
+    state: absent
+
+# verify that the keytab and principal are usable
+# We need to move this to a subfile so we can run
+# this against novajoin_server and novajoin_notifier
+
+- name: verify the novajoin keytab is usable
+  become: true
+  block:
+    - name: Set fact for novajoin user principal
+      set_fact:
+        novajoin_principal: "nova/{{ host_entry }}"
+
+    - name: Check for novajoin kerberos host keytab
+      stat:
+        path: "{{ novajoin_keytab_path }}"
+      register: novajoin_krb5_keytab_stat
+      delegate_to: novajoin_server
+
+    - name: Test if novajoin principal in novajoin keytab is usable
+      command: kinit -kt "{{ novajoin_keytab_path }}" -c /tmp/my_novajoin_krb5_ccache "{{ novajoin_principal }}"
+      become: true
+      register: novajoin_principal_usable_result
+      ignore_errors: true
+      delegate_to: novajoin_server
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+
+    - name: Set facts for novajoin principal is usable skipped
+      set_fact:
+        principal_usable_status: '{{ helper_status_skipped }}'
+        principal_usable_reason: "skipped checking if the novajoin principal is usable for host {{ ansible_host }} because there is no keytab file"
+        principal_usable_recommendations: null
+      when:
+        - not novajoin_krb5_keytab_stat.stat.exists
+
+    - name: Set facts for novajoin principal is usable success
+      set_fact:
+        principal_usable_status: '{{ helper_status_ok }}'
+        principal_usable_reason: "The principal {{ novajoin_principal }} is able to obtain a kerberos ticket"
+        principal_usable_recommendations: null
+        temp_krb_caches: "{{ novajoin_temp_krb_caches + [ '/tmp/my_novajoin_krb5_ccache' ] }}"
+      changed_when: true
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+        - novajoin_principal_usable_result is succeeded
+      notify:
+        - clean_up_novajoin_temp_krb_caches
+
+    - name: Set facts for principal is usable failure
+      set_fact:
+        principal_usable_status: '{{ helper_status_error }}'
+        principal_usable_reason: "Tho principal {{ novajoin_principal }} is unable to obtain a kerberos ticket"
+        principal_usable_recommendations: null
+      when:
+        - novajoin_krb5_keytab_stat.stat.exists
+        - novajoin_principal_usable_result is failed
+
+    - name: Report principal usable status
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
+      vars:
+        report_check: "Kerberos principal in novajoin keytab is usable check"
+        report_status: '{{ principal_usable_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ principal_usable_reason }}'
+        report_recommendations: '{{ principal_usable_recommendations }}'
+
+- name: verify that novajoin-server is running if not containerized
+  when: not containerized_undercloud
+  block:
+    - name: Check if novajoin-server is running
+      command: systemctl status novajoin-server
+      register: novajoin_server_status_result
+      ignore_errors: true
+
+    - name: Set facts for novajoin-server is running success
+      set_fact:
+        service_running_status: '{{ helper_status_ok }}'
+        service_running_reason: "The novajoin-server service is running"
+        service_running_recommendations: null
+      when: novajoin_server_status_result is success
+
+    - name: Set facts for novajoin-server is running failure
+      set_fact:
+        service_running_status: '{{ helper_status_error }}'
+        service_running_reason: "The novajoin-server service is not running"
+        service_running_recommendations: 
+          - "Start the novajoin-server service with systemctl start novajoin-server"
+      when: novajoin_server_status_result is failed
+
+    - name: Report novajoin-server status
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
+      vars:
+        report_check: "novajoin-server is running check"
+        report_status: '{{ service_running_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ service_running_reason }}'
+        report_recommendations: '{{ service_running_recommendations }}'
+
+- name: verify that novajoin-server is reachable
+  #when: 
+  #  - novajoin_server_status_result is success
+  block:
+    - name: check if novajoin-server port is reachable
+      wait_for:
+        port: "{{ novajoin_server_port }}"
+        host: "{{ novajoin_server_host }}"
+        timeout: 20
+      register: novajoin_server_port_status
+      ignore_errors: true
+
+    - name: Set facts for novajoin-server port status success
+      set_fact:
+        port_reachable_status: '{{ helper_status_ok }}'
+        port_reachable_reason: "The novajoin-server service is reachable on {{ novajoin_server_port }}"
+        port_reachable_recommendations: null
+      when: novajoin_server_port_status is success
+
+    - name: Set facts for novajoin-server port status failure
+      set_fact:
+        port_reachable_status: '{{ helper_status_error }}'
+        port_reachable_reason: "The novajoin-server service is started, but not reachable locally on {{ novajoin_server_port }}"
+        port_reachable_recommendations: 
+          - "iCheck the novajoin-server logs and journal entry"
+      when: novajoin_server_port_status is failed
+
+    - name: Report novajoin-server port status
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
+      vars:
+        report_check: "novajoin-server port is reachable check"
+        report_status: '{{ port_reachable_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ port_reachable_reason }}'
+        report_recommendations: '{{ port_reachable_recommendations }}'
+
+- name: verify that novajoin-notify is running if not containerized
+  when: not containerized_undercloud
+  block:
+    - name: Check if novajoin-notify is running
+      command: systemctl status novajoin-notify
+      register: novajoin_notify_status_result
+      ignore_errors: true
+
+    - name: Set facts for novajoin-notify is running success
+      set_fact:
+        service_running_status: '{{ helper_status_ok }}'
+        service_running_reason: "The novajoin-notify service is running"
+        service_running_recommendations: null
+      when: novajoin_notify_status_result is success
+
+    - name: Set facts for novajoin-notify is running failure
+      set_fact:
+        service_running_status: '{{ helper_status_error }}'
+        service_running_reason: "The novajoin-notify service is not running"
+        service_running_recommendations: 
+          - "Start the novajoin-notify service with systemctl start novajoin-notify"
+      when: novajoin_notify_status_result is failed
+
+    - name: Report novajoin-notify status
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
+      vars:
+        report_check: "novajoin-notify is running check"
+        report_status: '{{ service_running_status }}'
+        report_host: '{{ ansible_hostname }}'
+        report_reason: '{{ service_running_reason }}'
+        report_recommendations: '{{ service_running_recommendations }}'
