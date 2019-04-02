@@ -51,6 +51,49 @@
   set_fact:
     containerized_undercloud: podman_install is failed and docker_install is failed
 
+# check for status of novajoin_containers.  We need to do this here because
+# ansible does not provide a good error mechanism when commands run on containers
+# that are unreachable through delegate_to.
+# See (ansible issue)
+
+- name: check if novajoin_server is up for podman containers
+  shell: podman ps |grep novajoin_server
+  when: podman_install is success
+  register: novajoin_server_status_result
+  ignore_errors: true
+
+- name: check if novajoin_server is up for docker containers
+  shell: docker ps |grep novajoin_server
+  when: docker_install is success
+  register: novajoin_server_status_result
+  ignore_errors: true
+
+- name: Fail if novajoin_server is not up
+  fail:
+    msg: novajoin_server is not up.  The server must be up to continue the validations.
+  when:
+    - novajoin_server_status_result is defined
+    - novajoin_server_status_result is failed
+
+- name: check if novajoin_notifier is up for podman containers
+  shell: podman ps |grep novajoin_notifier
+  when: podman_install is success
+  register: novajoin_notifier_status_result
+  ignore_errors: true
+
+- name: check if novajoin_notifier is up for docker containers
+  shell: docker ps |grep novajoin_notifier
+  when: docker_install is success
+  register: novajoin_notifier_status_result
+  ignore_errors: true
+
+- name: Fail if novajoin_notifier is not up
+  fail:
+    msg: novajoin_notifier is not up.  The server must be up to continue the validations.
+  when:
+    - novajoin_notifier_status_result is defined
+    - novajoin_notifier_status_result is failed
+
 - name: Verify that join.conf exists
   stat:
     path: /etc/novajoin/join.conf
@@ -189,8 +232,8 @@
         report_recommendations: '{{ service_running_recommendations }}'
 
 - name: verify that novajoin-server is reachable
-  # when:
-  #  - novajoin_server_status_result is success
+  when:
+    - novajoin_server_status_result is success
   block:
     - name: check if novajoin-server port is reachable
       wait_for:
