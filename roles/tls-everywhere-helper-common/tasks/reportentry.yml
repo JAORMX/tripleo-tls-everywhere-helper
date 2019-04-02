@@ -1,0 +1,8 @@
+---
+- name: Write report entry
+  blockinfile:
+    create: true
+    marker: '* {mark} {{ report_check }} for host {{ report_host }}'
+    path: '{{ helper_report_path }}'
+    content: "{{ lookup('template', 'templates/report-template-txt.j2') }}"
+  delegate_to: localhost
