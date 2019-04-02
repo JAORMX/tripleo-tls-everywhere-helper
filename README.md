@@ -1,8 +1,15 @@
 Role Name
 =========
 
-A helper ansible role for validating and guiding you through a TripleO TLS
-everywhere deployment
+This is a set of helper ansible roles for validating and guiding you
+through a TripleO TLS everywhere deployment.
+
+As shown in the example playbook below, the three playbooks are
+tls-everywhere-helper-common, tls-everywhere-helper-undercloud and
+tls-everywhere-helper-overcloud.
+
+The tls-everywhere-helper-common playbook defines some parameters needed
+by the other playbooks and should always be included as shown. 
 
 
 Role Variables
@@ -16,14 +23,20 @@ Example Playbook
 ----------------
 
     ---
-    - hosts: all
+    - hosts: Undercloud
       roles:
-        - tripleo-tls-everywhere-helper
+        - tls-everywhere-helper-common
+        - tls-everywhere-helper-undercloud
 
-Running this playbook
+    - hosts: overcloud
+      roles:
+        - tls-everywhere-helper-common
+        - tls-everywhere-helper-overcloud
+
+Running the playbooks
 ---------------------
 
-This playbook is targetted at TripleO deployments. The following assumptions
+These playbooks is targeted at TripleO deployments. The following assumptions
 are made:
 
 * You are running this playbook from the undercloud host.
@@ -31,7 +44,7 @@ are made:
   (including the undercloud)
 * The dynamic inventory was created with the `tripleo-ansible-inventory` tool.
 
-It is assumed that the playbook will be ran from the undercloud.
+It is assumed that these playbooks will be run from the undercloud.
 
 ### Using the dynamic inventory
 
@@ -49,10 +62,10 @@ This will create an inventory file called **hosts.yaml**.
 
 Edit this file to have the undercloud `ansible_ssh_user` match what you're using.
 
-Finally, you can run the playbook as follows:
+Finally, you can run the playbooks as follows:
 
 ```
-ansible-playbook -i hosts.yaml tripleo-tls-everywhere-helper/tests/verify-tls-everywhere.yaml
+ansible-playbook -i hosts.yaml tripleo-tls-everywhere-helper/verify-tls-everywhere.yaml
 ```
 
 A report will be created in the path that `helper_report_path` specifies.
