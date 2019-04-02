@@ -115,7 +115,9 @@
     - pre-undercloud-deploy
 
 - name: Report DNS setup in undercloud.conf
-  import_tasks: reportentry.yml
+  include_role:
+    name: tls-everywhere-helper-common
+    tasks_from: reportentry.yml 
   vars:
     report_check: "DNS setup in undercloud.conf check"
     report_status: '{{ undercloud_conf_dns_status }}'
@@ -167,7 +169,9 @@
         - pre-undercloud-deploy
 
     - name: Report domain setup in undercloud.conf
-      import_tasks: reportentry.yml
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
       vars:
         report_check: "Domain setup in undercloud.conf check"
         report_status: '{{ undercloud_conf_domain_status }}'
@@ -203,7 +207,9 @@
     - pre-undercloud-deploy
 
 - name: Report enable novajoin setup in undercloud.conf
-  import_tasks: reportentry.yml
+  include_role:
+    name: tls-everywhere-helper-common
+    tasks_from: reportentry.yml 
   vars:
     report_check: "Enable novajoin setup in undercloud.conf check"
     report_status: '{{ undercloud_conf_enable_novajoin_status }}'
@@ -320,7 +326,9 @@
         - novajoin_principal_usable_result is failed
 
     - name: Report principal usable status
-      import_tasks: reportentry.yml
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
       vars:
         report_check: "Kerberos principal in novajoin keytab is usable check"
         report_status: '{{ principal_usable_status }}'
@@ -354,7 +362,9 @@
       when: novajoin_server_status_result is failed
 
     - name: Report novajoin-server status
-      import_tasks: reportentry.yml
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
       vars:
         report_check: "novajoin-server is running check"
         report_status: '{{ service_running_status }}'
@@ -392,7 +402,9 @@
       when: novajoin_server_port_status is failed
 
     - name: Report novajoin-server port status
-      import_tasks: reportentry.yml
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
       vars:
         report_check: "novajoin-server port is reachable check"
         report_status: '{{ port_reachable_status }}'
@@ -426,7 +438,9 @@
       when: novajoin_notify_status_result is failed
 
     - name: Report novajoin-notify status
-      import_tasks: reportentry.yml
+      include_role:
+        name: tls-everywhere-helper-common
+        tasks_from: reportentry.yml 
       vars:
         report_check: "novajoin-notify is running check"
         report_status: '{{ service_running_status }}'
