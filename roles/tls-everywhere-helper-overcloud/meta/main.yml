@@ -2,7 +2,9 @@
 galaxy_info:
   author: Juan Antonio Osorio Robles
   description: A helper ansible role for validating and guiding you through a
-               TripleO TLS everywhere deployment.
+               TripleO TLS everywhere deployment.  This role runs on the
+               overcloud, and depends on definitions in the
+               tls-everywhere-helper-common role.
   company: Red Hat Inc.
 
   # issue_tracker_url: http://example.com/issue/tracker
