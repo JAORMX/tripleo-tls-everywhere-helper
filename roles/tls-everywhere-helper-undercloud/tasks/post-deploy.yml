@@ -49,7 +49,7 @@
 
 - name: set containerized_undercloud boolean
   set_fact:
-    containerized_undercloud: podman_install is failed and docker_install is failed
+    containerized_undercloud: "{{ podman_install is success or docker_install is success }}"
 
 # check for status of novajoin_containers.  We need to do this here because
 # ansible does not provide a good error mechanism when commands run on containers
